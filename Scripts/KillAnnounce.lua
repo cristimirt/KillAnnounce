@@ -373,6 +373,8 @@ function ConfigSimple (p)
 end
 
 function ToggleDnD()
+	--MainPanel:SetTransparentInput(false)
+	MainPanel:SetTransparentInput(DragPanel:IsVisible())
 	MainPanel:Show(not MainPanel:IsVisible())
 	DragPanel:Show(not DragPanel:IsVisible())
 	firstPos = MainPanel:GetPlacementPlain()
