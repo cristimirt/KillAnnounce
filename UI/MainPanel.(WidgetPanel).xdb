@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<WidgetPanel>
+	<Name>MainPanel</Name>
+	<Children>
+		<Item href="Announce.(WidgetTextView).xdb#xpointer(/WidgetTextView)" />
+		<Item href="DragPanel.(WidgetPanel).xdb#xpointer(/WidgetPanel)" />
+	</Childre>
+	<Placement>
+		<X>
+			<Align>WIDGET_ALIGN_CENTER</Align>
+			<Pos>0</Pos>
+			<HighPos>0</HighPos>
+			<Size>800</Size>
+		</X>
+		<Y>
+			<Align>WIDGET_ALIGN_CENTER</Align>
+			<Pos>-220</Pos>
+			<HighPos>0</HighPos>
+			<Size>30</Size>
+		</Y>
+	</Placement>
+	<Visible>false</Visible>
+	<TransparentInput>false</TransparentInput>
+	<PickChildrenOnly>false</PickChildrenOnly>
+</WidgetPanel>

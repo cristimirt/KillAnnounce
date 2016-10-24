@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<WidgetPanel>
+	<Name>DragPanel</Name>
+	<BackLayer href="Exp.(WidgetLayerSimpleTexture).xdb#xpointer(/WidgetLayerSimpleTexture)" />
+	<Placement>
+		<QuantumScale>false</QuantumScale>
+		<X>
+			<Align>WIDGET_ALIGN_CENTER</Align>
+			<Pos>0</Pos>
+			<HighPos>0</HighPos>
+			<Size>200</Size>
+		</X>
+		<Y>
+			<Align>WIDGET_ALIGN_CENTER</Align>
+			<Pos>0</Pos>
+			<HighPos>0</HighPos>
+			<Size>30</Size>
+		</Y>
+	</Placement>
+	<Visible>false</Visible>
+	<TransparentInput>false</TransparentInput>
+	<PickChildrenOnly>false</PickChildrenOnly>
+</WidgetPanel>
