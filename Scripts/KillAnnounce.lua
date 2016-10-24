@@ -45,23 +45,37 @@ local distance = 0
 function OnAvatarCreated ()
 	avatarID = avatar.GetId()
 	--Register avatar-related handlers
-	common.RegisterEventHandler(OnUnitDamageReceived, 'EVENT_UNIT_DAMAGE_RECEIVED')
+	--common.RegisterEventHandler(OnUnitDamageReceived, 'EVENT_UNIT_DAMAGE_RECEIVED')
 end
 
 
 --EVENT_UNIT_DAMAGE_RECEIVED
 function OnUnitDamageReceived (damage)
-	if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target) and unit.IsPlayer(damage.target) and damage.lethal then
+	if damage.lethal then
+		if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target)
+		and unit.IsPlayer(damage.target)
+		then
+			if damage.target == avatarID then
+				playerKilled(damage.source, fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+			else
+				unitKilled(damage.source, damage.target, object.IsFriend(damage.target), fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+			end
+		end
+	end
+	--[[if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target) and unit.IsPlayer(damage.target) and damage.lethal then
+		common.LogInfo("","someone died")
 		--The player was killed
 		if damage.target == avatarID then
+			common.LogInfo("","player died")
 			if config['playerKilled'] then
 				playerKilled(damage.source, fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
 			end
 		else
+			common.LogInfo("","someone else died")
 			--Someone else was killed
-			unitKilled(damage.source, damage.target, unit.IsFriend(damage.target), fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+			unitKilled(damage.source, damage.target, object.IsFriend(damage.target), fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
 		end
-	end
+	end]]
 end
 
 
@@ -113,6 +127,13 @@ function playerKilled (killerID,sourceName,ability,damage)
 		--local killer = object.GetName(killerID)
 		local killer = sourceName
 		local abilityName = " ("..ability..")"
+		if damage > 1000000 then
+			damage = round(damage / 1000000,2)
+			damage = damage .. "M"
+		elseif damage > 1000 then
+			damage = round(damage / 1000,2)
+			damage = damage .. "K"
+		end
 		local damageAmount = " ("..damage..")"
 		if not config['showDamageAmount'] then damageAmount = "" end
 		--To prevent the pet name from showing up instead of the owner in the announcement
@@ -135,6 +156,13 @@ function unitKilled (killerID, victimID, isFriendly, sourceName, ability, damage
 		local killer = sourceName
 		local victim = fromWS(object.GetName(victimID))
 		local abilityName = " ("..ability..")"
+		if damage > 1000000 then
+			damage = round(damage / 1000000,2)
+			damage = damage .. "M"
+		elseif damage > 1000 then
+			damage = round(damage / 1000,2)
+			damage = damage .. "K"
+		end
 		local damageAmount = " ("..damage..")"
 		if not config['showDamageAmount'] then damageAmount = "" end
 		if unit.IsPet(killerID) then
@@ -431,6 +459,7 @@ function Init()
 
 	--Register the rest of the event handlers
 	common.RegisterEventHandler(onEffectFinished, "EVENT_EFFECT_FINISHED")
+	common.RegisterEventHandler(OnUnitDamageReceived, 'EVENT_UNIT_DAMAGE_RECEIVED')
 end
 
 
