@@ -22,6 +22,7 @@ local originalPos
 local version = "2.3.2"
 local vdate = "(09.09.2014)"
 local compatible = { }
+local tracked = { }
 
 local colorList = {
 	killedByPlayer = 0,
@@ -51,6 +52,11 @@ end
 
 --EVENT_UNIT_DAMAGE_RECEIVED
 function OnUnitDamageReceived (damage)
+	if (config['experimental']) then
+		if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target) and unit.IsPlayer(damage.target) then
+			tracked[damage.target] = 1
+		end
+	end
 	if damage.lethal then
 		if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target)
 		and unit.IsPlayer(damage.target)
@@ -62,34 +68,20 @@ function OnUnitDamageReceived (damage)
 			end
 		end
 	end
-	--[[if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target) and unit.IsPlayer(damage.target) and damage.lethal then
-		common.LogInfo("","someone died")
-		--The player was killed
-		if damage.target == avatarID then
-			common.LogInfo("","player died")
-			if config['playerKilled'] then
-				playerKilled(damage.source, fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
-			end
-		else
-			common.LogInfo("","someone else died")
-			--Someone else was killed
-			unitKilled(damage.source, damage.target, object.IsFriend(damage.target), fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+end
+
+--EVENT_UNIT_DEAD_CHANGED
+function OnUnitDeadChanged(event)
+	if (config['experimental']) then
+		for k,v in pairs(tracked) do
+			common.LogInfo("",tostring(k)..":"..tostring(v))
 		end
-	end]]
+		if event.unitId and tracked[event.unitId] == nil and unit.IsPlayer(event.unitId) then
+			announceContent = fromWS(object.GetName(event.unitId)).." died."
+			addAnnouncement('killedByFriend',announceContent)
+		end
+	end
 end
-
-
---EVENT_MATCH_MAKING_EVENT_MEMBER_ADDED
---[[
-function onMemberAdded (event)
-	local eventId = matchMaking.GetCurrentEventId()
-	local matchInfo = matchMaking.GetEventInfo(eventId)
-
-	--matchMaking.ListenEventProgress(true)
-	progressInfo = matchMaking.GetEventProgressInfo()
-end
---]]
-
 
 --EVENT_EFFECT_FINISHED
 function onEffectFinished ( event )
@@ -296,6 +288,7 @@ function defaults ()
 	config['showAbilityName'] = true
 	config['showDamageAmount'] = true
 	config['version'] = version
+	config['experimental'] = false
 	MainPanel:SetPlacementPlain(originalPos)
 	userMods.SetAvatarConfigSection('KillAnnounce', config)
 	getColors()
@@ -351,7 +344,12 @@ function ConfigEvent ()
 	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 14, name = 'announceOnScreen', btnType = "T/F", state = config['announceOnScreen']})
 	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 15, name = 'showAbilityName', btnType = "T/F", state = config['showAbilityName']})
 	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 16, name = 'showDamageAmount', btnType = "T/F", state = config['showDamageAmount']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 17, name = 'Defaults', btnType = 'Simple'})
+
+	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 17, name = "experimental", btnType = 'T/F', state = config['experimental']})
+
+	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 18, name = 'Defaults', btnType = 'Simple'})
+
+
 end
 
 
@@ -460,8 +458,10 @@ function Init()
 	common.RegisterEventHandler( OnSlash, "EVENT_UNKNOWN_SLASH_COMMAND" )
 
 	--Register the rest of the event handlers
+
 	common.RegisterEventHandler(onEffectFinished, "EVENT_EFFECT_FINISHED")
 	common.RegisterEventHandler(OnUnitDamageReceived, 'EVENT_UNIT_DAMAGE_RECEIVED')
+	common.RegisterEventHandler(OnUnitDeadChanged, 'EVENT_UNIT_DEAD_CHANGED')
 end
 
 
