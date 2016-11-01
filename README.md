@@ -1,5 +1,6 @@
 # KillAnnounce
 Addon is also available at https://alloder.pro/files/file/229-killannounce/
+
 With this addon, everytime a player around you dies, an announcement will appear saying who killed him.
 
 If you or a friendly player dies, the announcement will be red, if you kill a player or a friend kills a player, the announcement will be yellow.
