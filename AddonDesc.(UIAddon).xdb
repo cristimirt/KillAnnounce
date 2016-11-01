@@ -15,8 +15,9 @@
   <revision>2.3.3</revision>
   <ScriptFileRefs>
 	<Item href="Scripts/Locales.lua"/>
-	<Item href="Scripts/Core.lua"/>
     <Item href="Scripts/LibDnD.lua"/>
+    <Item href="Scripts/LibTimer.lua"/>
+	<Item href="Scripts/Core.lua"/>
 	<Item href="Scripts/KillAnnounce.lua"/>
   </ScriptFileRefs>
-<addon_name>KillAnnounce</addon_name><addon_date>1410361436</addon_date><addon_link>https://alloder.pro/files/file/229-killannounce/?do=download&amp;r=24252&amp;confirm=1&amp;t=1&amp;csrfKey=</addon_link></UIAddon>
+<addon_name>KillAnnounce</addon_name><addon_date>1410361436</addon_date><addon_link>https://alloder.pro/files/file/229-killannounce/</addon_link></UIAddon>

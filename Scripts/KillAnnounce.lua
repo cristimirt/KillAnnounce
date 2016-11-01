@@ -19,8 +19,8 @@ local progressInfo
 local DragPanel
 local MainPanel
 local originalPos
-local version = "2.3.2"
-local vdate = "(09.09.2014)"
+local version = "2.3.3"
+local vdate = "(01.11.2016)"
 local compatible = { }
 local tracked = { }
 
@@ -51,7 +51,56 @@ end
 
 
 --EVENT_UNIT_DAMAGE_RECEIVED
-function OnUnitDamageReceived (damage)
+function OnUnitDamageReceived(damage)
+	if damage.lethal then
+		if damage.target
+		 and object.IsExist(damage.target)
+		 and object.IsUnit(damage.target)
+		 and unit.IsPlayer(damage.target)
+		then
+			if config['experimental'] then
+				tracked[damage.target] = true
+			end
+			if damage.target == avatarID then
+				playerKilled(damage.source, fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+			else
+				unitKilled(damage.source, damage.target, object.IsFriend(damage.target), fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+			end
+		end
+	end
+end
+
+function OnUnitDeadChangedTimed(unitId)
+	if tracked[unitId] ~= nil then
+		tracked[unitId] = nil
+	else
+		if object.IsExist(unitId) then
+			local announceContent = fromWS(object.GetName(unitId)).." died."
+			local announceType = "killedByFriend"
+			if object.IsFriend(unitId) then
+				announceType = "friendKilled"
+			end
+			addAnnouncement(announceType,announceContent)
+		end
+	end
+end
+
+--EVENT_UNIT_DEAD_CHANGED
+function OnUnitDeadChanged(event)
+	if config['experimental'] then
+		local unitId = event.unitId
+		if object.IsExist(unitId)
+		 and object.IsUnit(unitId)
+		 and unit.IsPlayer(unitId)
+		 and object.IsDead(unitId)
+		then
+			StartTimer(OnUnitDeadChangedTimed,1000,unitId)
+		end
+	end
+end
+
+--EVENT_UNIT_DAMAGE_RECEIVED
+function OnUnitDamageReceivedOld (damage)
 	if (config['experimental']) then
 		if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target) and unit.IsPlayer(damage.target) then
 			tracked[damage.target] = 1
@@ -70,15 +119,24 @@ function OnUnitDamageReceived (damage)
 	end
 end
 
+
 --EVENT_UNIT_DEAD_CHANGED
-function OnUnitDeadChanged(event)
-	if (config['experimental']) then
-		for k,v in pairs(tracked) do
-			common.LogInfo("",tostring(k)..":"..tostring(v))
-		end
-		if event.unitId and tracked[event.unitId] == nil and unit.IsPlayer(event.unitId) then
-			announceContent = fromWS(object.GetName(event.unitId)).." died."
-			addAnnouncement('killedByFriend',announceContent)
+function OnUnitDeadChangedOld(event)
+	if not ( object.IsInCombat( avatar.GetId() ) or (unit.GetActivePet(avatar.GetId()) and avatar.IsPetInCombat() )) then
+		local unitId = event.unitId
+		if (config['experimental']) then
+			if unitId and object.IsExist(unitId) and tracked[unitId] == nil
+			and unit.IsPlayer(unitId)
+			then
+				if avatar.GetTarget() ~= unitId and unit.GetTarget(avatar.GetTarget()) ~= unitId then
+					local announceContent = fromWS(object.GetName(unitId)).." died."
+					local announceType = "killedByFriend"
+					if object.IsFriend(unitId) then
+						announceType = "friendKilled"
+					end
+					addAnnouncement(announceType,announceContent)
+				end
+			end
 		end
 	end
 end
@@ -371,9 +429,7 @@ function ConfigSimple (p)
 end
 
 function ToggleDnD()
-	--MainPanel:SetTransparentInput(false)
 	MainPanel:SetTransparentInput(DragPanel:IsVisible())
-	MainPanel:Show(not MainPanel:IsVisible())
 	DragPanel:Show(not DragPanel:IsVisible())
 	firstPos = MainPanel:GetPlacementPlain()
 	config['pos'] = firstPos
@@ -414,7 +470,7 @@ end
 function Init()
 	--Initialize widgets
 	MainPanel = mainForm:GetChildChecked("MainPanel", false)
-	MainPanel:Show(false)
+	MainPanel:Show(true)
 	originalPos = MainPanel:GetPlacementPlain()
 	AnnounceText = MainPanel:GetChildChecked( "Announce", false )
 	announceDesc = AnnounceText:GetWidgetDesc()
