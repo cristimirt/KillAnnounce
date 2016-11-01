@@ -19,9 +19,10 @@ local progressInfo
 local DragPanel
 local MainPanel
 local originalPos
-local version = "2.3.2"
-local vdate = "(09.09.2014)"
+local version = "2.3.3"
+local vdate = "(01.11.2016)"
 local compatible = { }
+local tracked = { }
 
 local colorList = {
 	killedByPlayer = 0,
@@ -45,37 +46,100 @@ local distance = 0
 function OnAvatarCreated ()
 	avatarID = avatar.GetId()
 	--Register avatar-related handlers
-	common.RegisterEventHandler(OnUnitDamageReceived, 'EVENT_UNIT_DAMAGE_RECEIVED')
+	--common.RegisterEventHandler(OnUnitDamageReceived, 'EVENT_UNIT_DAMAGE_RECEIVED')
 end
 
 
 --EVENT_UNIT_DAMAGE_RECEIVED
-function OnUnitDamageReceived (damage)
-	if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target) and unit.IsPlayer(damage.target) and damage.lethal then
-		--The player was killed
-		if damage.target == avatarID then
-			if config['playerKilled'] then
-				playerKilled(damage.source, fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+function OnUnitDamageReceived(damage)
+	if damage.lethal then
+		if damage.target
+		 and object.IsExist(damage.target)
+		 and object.IsUnit(damage.target)
+		 and unit.IsPlayer(damage.target)
+		then
+			if config['experimental'] then
+				tracked[damage.target] = true
 			end
-		else
-			--Someone else was killed
-			unitKilled(damage.source, damage.target, unit.IsFriend(damage.target), fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+			if damage.target == avatarID then
+				playerKilled(damage.source, fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+			else
+				unitKilled(damage.source, damage.target, object.IsFriend(damage.target), fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+			end
+		end
+	end
+end
+
+function OnUnitDeadChangedTimed(unitId)
+	if tracked[unitId] ~= nil then
+		tracked[unitId] = nil
+	else
+		if object.IsExist(unitId) then
+			local announceContent = fromWS(object.GetName(unitId)).." died."
+			local announceType = "killedByFriend"
+			if object.IsFriend(unitId) then
+				announceType = "friendKilled"
+			end
+			addAnnouncement(announceType,announceContent)
+		end
+	end
+end
+
+--EVENT_UNIT_DEAD_CHANGED
+function OnUnitDeadChanged(event)
+	if config['experimental'] then
+		local unitId = event.unitId
+		if object.IsExist(unitId)
+		 and object.IsUnit(unitId)
+		 and unit.IsPlayer(unitId)
+		 and object.IsDead(unitId)
+		then
+			StartTimer(OnUnitDeadChangedTimed,1000,unitId)
+		end
+	end
+end
+
+--EVENT_UNIT_DAMAGE_RECEIVED
+function OnUnitDamageReceivedOld (damage)
+	if (config['experimental']) then
+		if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target) and unit.IsPlayer(damage.target) then
+			tracked[damage.target] = 1
+		end
+	end
+	if damage.lethal then
+		if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target)
+		and unit.IsPlayer(damage.target)
+		then
+			if damage.target == avatarID then
+				playerKilled(damage.source, fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+			else
+				unitKilled(damage.source, damage.target, object.IsFriend(damage.target), fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+			end
 		end
 	end
 end
 
 
---EVENT_MATCH_MAKING_EVENT_MEMBER_ADDED
---[[
-function onMemberAdded (event)
-	local eventId = matchMaking.GetCurrentEventId()
-	local matchInfo = matchMaking.GetEventInfo(eventId)
-
-	--matchMaking.ListenEventProgress(true)
-	progressInfo = matchMaking.GetEventProgressInfo()
+--EVENT_UNIT_DEAD_CHANGED
+function OnUnitDeadChangedOld(event)
+	if not ( object.IsInCombat( avatar.GetId() ) or (unit.GetActivePet(avatar.GetId()) and avatar.IsPetInCombat() )) then
+		local unitId = event.unitId
+		if (config['experimental']) then
+			if unitId and object.IsExist(unitId) and tracked[unitId] == nil
+			and unit.IsPlayer(unitId)
+			then
+				if avatar.GetTarget() ~= unitId and unit.GetTarget(avatar.GetTarget()) ~= unitId then
+					local announceContent = fromWS(object.GetName(unitId)).." died."
+					local announceType = "killedByFriend"
+					if object.IsFriend(unitId) then
+						announceType = "friendKilled"
+					end
+					addAnnouncement(announceType,announceContent)
+				end
+			end
+		end
+	end
 end
---]]
-
 
 --EVENT_EFFECT_FINISHED
 function onEffectFinished ( event )
@@ -113,6 +177,13 @@ function playerKilled (killerID,sourceName,ability,damage)
 		--local killer = object.GetName(killerID)
 		local killer = sourceName
 		local abilityName = " ("..ability..")"
+		if damage > 1000000 then
+			damage = round(damage / 1000000,2)
+			damage = damage .. "M"
+		elseif damage > 1000 then
+			damage = round(damage / 1000,2)
+			damage = damage .. "K"
+		end
 		local damageAmount = " ("..damage..")"
 		if not config['showDamageAmount'] then damageAmount = "" end
 		--To prevent the pet name from showing up instead of the owner in the announcement
@@ -135,6 +206,13 @@ function unitKilled (killerID, victimID, isFriendly, sourceName, ability, damage
 		local killer = sourceName
 		local victim = fromWS(object.GetName(victimID))
 		local abilityName = " ("..ability..")"
+		if damage > 1000000 then
+			damage = round(damage / 1000000,2)
+			damage = damage .. "M"
+		elseif damage > 1000 then
+			damage = round(damage / 1000,2)
+			damage = damage .. "K"
+		end
 		local damageAmount = " ("..damage..")"
 		if not config['showDamageAmount'] then damageAmount = "" end
 		if unit.IsPet(killerID) then
@@ -268,6 +346,7 @@ function defaults ()
 	config['showAbilityName'] = true
 	config['showDamageAmount'] = true
 	config['version'] = version
+	config['experimental'] = true
 	MainPanel:SetPlacementPlain(originalPos)
 	userMods.SetAvatarConfigSection('KillAnnounce', config)
 	getColors()
@@ -323,7 +402,12 @@ function ConfigEvent ()
 	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 14, name = 'announceOnScreen', btnType = "T/F", state = config['announceOnScreen']})
 	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 15, name = 'showAbilityName', btnType = "T/F", state = config['showAbilityName']})
 	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 16, name = 'showDamageAmount', btnType = "T/F", state = config['showDamageAmount']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 17, name = 'Defaults', btnType = 'Simple'})
+
+	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 17, name = "experimental", btnType = 'T/F', state = config['experimental']})
+
+	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 18, name = 'Defaults', btnType = 'Simple'})
+
+
 end
 
 
@@ -345,7 +429,7 @@ function ConfigSimple (p)
 end
 
 function ToggleDnD()
-	MainPanel:Show(not MainPanel:IsVisible())
+	MainPanel:SetTransparentInput(DragPanel:IsVisible())
 	DragPanel:Show(not DragPanel:IsVisible())
 	firstPos = MainPanel:GetPlacementPlain()
 	config['pos'] = firstPos
@@ -386,7 +470,7 @@ end
 function Init()
 	--Initialize widgets
 	MainPanel = mainForm:GetChildChecked("MainPanel", false)
-	MainPanel:Show(false)
+	MainPanel:Show(true)
 	originalPos = MainPanel:GetPlacementPlain()
 	AnnounceText = MainPanel:GetChildChecked( "Announce", false )
 	announceDesc = AnnounceText:GetWidgetDesc()
@@ -430,7 +514,10 @@ function Init()
 	common.RegisterEventHandler( OnSlash, "EVENT_UNKNOWN_SLASH_COMMAND" )
 
 	--Register the rest of the event handlers
+
 	common.RegisterEventHandler(onEffectFinished, "EVENT_EFFECT_FINISHED")
+	common.RegisterEventHandler(OnUnitDamageReceived, 'EVENT_UNIT_DAMAGE_RECEIVED')
+	common.RegisterEventHandler(OnUnitDeadChanged, 'EVENT_UNIT_DEAD_CHANGED')
 end
 
 

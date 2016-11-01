@@ -42,7 +42,7 @@ end
 -- +----------------+
 function Compare(t1, t2)
 	if t1 == nil or t2 == nil then return false end
-	if type(t1) ~= type(t2) then 
+	if type(t1) ~= type(t2) then
 		return false
 	end
 	if type(t1) == "string" or type(t1) == "number" or type(t1) == "boolean" then
@@ -53,22 +53,22 @@ function Compare(t1, t2)
 		for i, _ in pairs(t1) do
 			local type1 = type(t1[i])
 			local type2 = type(t2[i])
-			if type1 ~= type2 then 
+			if type1 ~= type2 then
 				return false
 			else
 				if type1 == "string" or type1 == "number" or type1 == "boolean" then
-					if t2[i] == nil or not (t1[i] == t2[i]) then 
-						return false 
+					if t2[i] == nil or not (t1[i] == t2[i]) then
+						return false
 					end
 				elseif type1 == "table" then
-					if not Compare(t1[i], t2[i]) then 
-						return false 
+					if not Compare(t1[i], t2[i]) then
+						return false
 					end
 				else
 					if t1[i].IsEqual == nil then break
 					else
-						if not t1[i]:IsEqual(t2[i]) then 
-							return false 
+						if not t1[i]:IsEqual(t2[i]) then
+							return false
 						end
 					end
 				end
@@ -77,22 +77,22 @@ function Compare(t1, t2)
 		for i, _ in pairs(t2) do
 			local type1 = type(t1[i])
 			local type2 = type(t2[i])
-			if type1 ~= type2 then 
+			if type1 ~= type2 then
 				return false
 			else
 				if type2 == "string" or type2 == "number" or type2 == "boolean" then
-					if t1[i] == nil or not (t2[i] == t1[i]) then 
-					 	return false 
+					if t1[i] == nil or not (t2[i] == t1[i]) then
+					 	return false
 					end
 				elseif type2 == "table" then
-					if not Compare(t2[i], t1[i]) then 
-						return false 
+					if not Compare(t2[i], t1[i]) then
+						return false
 					end
 				else
 					if t2[i].IsEqual == nil then break
 					else
-						if not t2[i]:IsEqual(t1[i]) then 
-							return false 
+						if not t2[i]:IsEqual(t1[i]) then
+							return false
 						end
 					end
 				end
@@ -116,8 +116,8 @@ function getTableName(t, tbl)
 end
 
 function printTable( t, nr, tbl )
-	if type(t) ~= "table" or t == nil then 
-		return false 
+	if type(t) ~= "table" or t == nil then
+		return false
 	end
 	local tbl = tbl or _G
 	local nr = nr or 0
@@ -136,6 +136,10 @@ function printTable( t, nr, tbl )
 		end
 	end
 	LogInfo(tab.."}")
+end
+
+function LogInfo(param)
+	common.LogInfo("",param)
 end
 
 -- +-------------------------+
@@ -179,8 +183,8 @@ local function GetGameLocalization()
 		local name = value and value.name
 		if name then
 			return userMods.FromWString( name )
-		else 
-			return localization 
+		else
+			return localization
 		end
 	end
 end

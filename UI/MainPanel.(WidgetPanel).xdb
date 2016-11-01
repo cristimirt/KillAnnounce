@@ -20,6 +20,6 @@
 		</Y>
 	</Placement>
 	<Visible>false</Visible>
-	<TransparentInput>false</TransparentInput>
+	<TransparentInput>true</TransparentInput>
 	<PickChildrenOnly>false</PickChildrenOnly>
 </WidgetPanel>
