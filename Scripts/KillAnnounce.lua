@@ -346,7 +346,7 @@ function defaults ()
 	config['showAbilityName'] = true
 	config['showDamageAmount'] = true
 	config['version'] = version
-	config['experimental'] = false
+	config['experimental'] = true
 	MainPanel:SetPlacementPlain(originalPos)
 	userMods.SetAvatarConfigSection('KillAnnounce', config)
 	getColors()
