@@ -75,7 +75,7 @@ function OnUnitDeadChangedTimed(unitId)
 		tracked[unitId] = nil
 	else
 		if object.IsExist(unitId) then
-			local announceContent = fromWS(object.GetName(unitId)).." died."
+			local announceContent = string.format(GTL("died"), fromWS(object.GetName(unitId)))
 			local announceType = "killedByFriend"
 			if object.IsFriend(unitId) then
 				announceType = "friendKilled"
@@ -99,47 +99,6 @@ function OnUnitDeadChanged(event)
 	end
 end
 
---EVENT_UNIT_DAMAGE_RECEIVED
-function OnUnitDamageReceivedOld (damage)
-	if (config['experimental']) then
-		if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target) and unit.IsPlayer(damage.target) then
-			tracked[damage.target] = 1
-		end
-	end
-	if damage.lethal then
-		if damage.target and object.IsExist(damage.target) and object.IsUnit(damage.target)
-		and unit.IsPlayer(damage.target)
-		then
-			if damage.target == avatarID then
-				playerKilled(damage.source, fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
-			else
-				unitKilled(damage.source, damage.target, object.IsFriend(damage.target), fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
-			end
-		end
-	end
-end
-
-
---EVENT_UNIT_DEAD_CHANGED
-function OnUnitDeadChangedOld(event)
-	if not ( object.IsInCombat( avatar.GetId() ) or (unit.GetActivePet(avatar.GetId()) and avatar.IsPetInCombat() )) then
-		local unitId = event.unitId
-		if (config['experimental']) then
-			if unitId and object.IsExist(unitId) and tracked[unitId] == nil
-			and unit.IsPlayer(unitId)
-			then
-				if avatar.GetTarget() ~= unitId and unit.GetTarget(avatar.GetTarget()) ~= unitId then
-					local announceContent = fromWS(object.GetName(unitId)).." died."
-					local announceType = "killedByFriend"
-					if object.IsFriend(unitId) then
-						announceType = "friendKilled"
-					end
-					addAnnouncement(announceType,announceContent)
-				end
-			end
-		end
-	end
-end
 
 --EVENT_EFFECT_FINISHED
 function onEffectFinished ( event )

@@ -2,6 +2,7 @@
 -- |LibTimer                         |
 -- |Emulate a simple timer function  |
 -- |Author: Zurion/Cristi Mirt       |
+-- |Version: 1.0.0                   |
 -- |Last update: 01-11-2016          |
 -- +=================================+
 
