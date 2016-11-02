@@ -11,8 +11,8 @@
   </Forms>
   <MainFormId>Main</MainFormId>
   <Name>KillAnnounce</Name>
-  <author>MexicanGuy/Zurion</author>
-  <revision>2.3.3</revision>
+  <author>Zurion</author>
+  <revision>2.3.4</revision>
   <ScriptFileRefs>
 	<Item href="Scripts/Locales.lua"/>
     <Item href="Scripts/LibDnD.lua"/>

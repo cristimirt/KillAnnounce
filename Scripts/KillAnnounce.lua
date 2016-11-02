@@ -19,8 +19,8 @@ local progressInfo
 local DragPanel
 local MainPanel
 local originalPos
-local version = "2.3.3"
-local vdate = "(01.11.2016)"
+local version = "2.3.4"
+local vdate = "(02.11.2016)"
 local compatible = { }
 local tracked = { }
 
