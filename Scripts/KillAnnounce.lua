@@ -1,107 +1,412 @@
---------------------------------------------------------------------------------
--- GLOBALS
---------------------------------------------------------------------------------
+-- +=========+
+-- | GLOBALS |
+-- +=========+
 
---Widgets
+-- Widgets
 local AnnounceText
-
---Variables
-
-local config
-local avatarID
-local announceDesc
-local announceList = {}
-local announceContent = ''
-local announceCount = 0
-local moving = false
-local avatarMarkId
-local progressInfo
 local DragPanel
 local MainPanel
-local originalPos
-local version = "2.3.4"
-local vdate = "(02.11.2016)"
-local compatible = { }
-local tracked = { }
+local AnnounceDesc
 
-local colorList = {
+-- Variables
+local AddonName = common.GetAddonName()
+local Version = "2.4.0"
+local VDate = "(17.03.2021)"
+local AddonDescription = "Shows a notification when you or a nearby player is killed"
+local configSectionName = 'KillAnnounce'
+local Config = {}
+local CompatibleWithVersions = {}
+local ColorList = {
 	killedByPlayer = 0,
 	playerKilled = 0,
 	killedByFriend = 0,
 	friendKilled = 0
 }
-
---Announce constants
-
+local OnEvent = {}
+local OnReaction = {}
+local OriginalPos
+local FirstPos = {}
+local PlayersTracked = {}
+local OnUnitDamageReceivedFunctions = {}
+local AnnounceList = {}
 local ANNOUNCE_FADE_IN_TIME = 300
 local ANNOUNCE_FADE_OUT_TIME = 900
-local firstPos = {}
-local distance = 0
+local AnnouncePadding = 0
+local PanelIsMoving = false
 
---------------------------------------------------------------------------------
--- EVENT HANDLERS
---------------------------------------------------------------------------------
 
---EVENT_AVATAR_CREATED
-function OnAvatarCreated ()
-	avatarID = avatar.GetId()
-	--Register avatar-related handlers
-	--common.RegisterEventHandler(OnUnitDamageReceived, 'EVENT_UNIT_DAMAGE_RECEIVED')
+-- +===========+
+-- | Functions |
+-- +===========+
+
+function AddAnnouncement(content,killType)
+    if Config.announceOnScreen then
+		--Create and format the announcement
+		local announcement = mainForm:CreateWidgetByDesc(AnnounceDesc)
+		local form = string.format('<header color="0x%s" alignx="center" fontsize="%s" outline="1" shadow="1"><rs class="class"><r name="value"/></rs></header>', ColorList[killType], tostring(Config.fontSize))
+		local placement = nil
+
+		announcement:SetFormat(ToWS(form))
+		announcement:SetVal('value', ToWS(content))
+
+		table.insert(AnnounceList, announcement)
+
+		--Check where to put the announcememt
+		if #AnnounceList > 1 then
+			placement = AnnounceList[#AnnounceList-1]:GetPlacementPlain()
+			placement.posY = placement.posY - AnnouncePadding
+		else
+			placement = FirstPos
+		end
+		--Show the announcement
+		MainPanel:Show(true)
+		announcement:SetPlacementPlain(placement)
+		announcement:Show(true)
+		announcement:PlayFadeEffect( 0.0, .999, ANNOUNCE_FADE_IN_TIME, EA_MONOTONOUS_INCREASE)
+
+		--Remove the bottom announcement
+		if #AnnounceList > Config.maxAnnouncements then
+			if not PanelIsMoving then
+				AnnounceList[1]:PlayFadeEffect(1.0, 0.0, ANNOUNCE_FADE_OUT_TIME, EA_MONOTONOUS_INCREASE)
+			end
+		end
+		if #AnnounceList == 0 then MainPanel:Show(false) end
+	end
+    if Config.postInChat then
+        PushToChat(content,Config.fontSize,ColorList[killType])
+    end
 end
 
-
---EVENT_UNIT_DAMAGE_RECEIVED
-function OnUnitDamageReceived(damage)
-	if damage.lethal then
+function OnUnitDamageReceived(damage,v)
+    if damage.lethal then
 		if damage.target
 		 and object.IsExist(damage.target)
 		 and object.IsUnit(damage.target)
 		 and unit.IsPlayer(damage.target)
 		then
-			if config['experimental'] then
-				tracked[damage.target] = true
-			end
-			if damage.target == avatarID then
-				playerKilled(damage.source, fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+			local abilityName = nil
+			if damage.ability then abilityName = FromWS(damage.ability) end
+			if damage.target == avatar.GetId() then
+				PlayerKilled(damage.source, FromWS(damage.sourceName), abilityName,damage.amount)
 			else
-				unitKilled(damage.source, damage.target, object.IsFriend(damage.target), fromWS(damage.sourceName), fromWS(damage.ability),damage.amount)
+				-- PushToChatSimple(FromWS(damage.sourceName).." killed someone")
+				UnitKilled(damage.source, damage.target, object.IsFriend(damage.target), FromWS(damage.sourceName), abilityName,damage.amount)
 			end
 		end
 	end
 end
 
-function OnUnitDeadChangedTimed(unitId)
-	if tracked[unitId] ~= nil then
-		tracked[unitId] = nil
-	else
-		if object.IsExist(unitId) then
-			local announceContent = string.format(GTL("died"), fromWS(object.GetName(unitId)))
-			local announceType = "killedByFriend"
-			if object.IsFriend(unitId) then
-				announceType = "friendKilled"
+function PlayerKilled (killerID,sourceName,ability,damage)
+	if killerID and object.IsExist(killerID) and object.IsUnit(killerID) then
+        --local killer = object.GetName(killerID)
+		local killer = sourceName
+		local abilityName = ""
+		if ability ~= nil then 
+			abilityName = " ("..ability..")"
+		end
+		if damage > 1000000 then
+			damage = Round(damage / 1000000,2)
+			damage = damage .. "M"
+		elseif damage > 1000 then
+			damage = Round(damage / 1000,2)
+			damage = damage .. "K"
+		end
+		local damageAmount = " ("..damage..")"
+		if not Config.showDamageAmount then damageAmount = "" end
+		--To prevent the pet name from showing up instead of the owner in the announcement
+		if unit.IsPet(killerID) then
+			local ownerId = unit.GetPetOwner(killerID)
+			if unit.IsPlayer(ownerId) then
+				killer = FromWS(object.GetName(ownerId))
+			else
+				killer = sourceName
 			end
-			addAnnouncement(announceType,announceContent)
+			abilityName = " (Pet)"
+		end
+		if not Config.showAbilityName then abilityName = "" end
+		local announceContent = string.format(GTL("You were killed by")..abilityName..damageAmount, killer)
+		AddAnnouncement(announceContent,'playerKilled')
+	end
+end
+
+function UnitKilled (killerID, victimID, isFriendly, sourceName, ability, damage)
+	--if killerID == nil then return end
+	if victimID and unit.IsPet(victimID) then return end
+	if killerID
+        and object.IsExist(killerID)
+        and object.IsExist(victimID)
+        and object.IsUnit(killerID)
+        and object.IsUnit(victimID)
+        then
+        local announceContent
+		--local killer = userMods.FromWString(object.GetName(killerID))
+		local killer = sourceName
+		local victim = FromWS(object.GetName(victimID))
+		-- PushToChatSimple(killer.." killed "..victim)
+		--AddAnnouncement(killer.." killed "..victim,'killedByFriend',)
+		local abilityName = " ("..ability..")"
+		if damage > 1000000 then
+			damage = Round(damage / 1000000,2)
+			damage = damage .. "M"
+		elseif damage > 1000 then
+			damage = Round(damage / 1000,2)
+			damage = damage .. "K"
+		end
+		local damageAmount = " ("..damage..")"
+		if not Config.showDamageAmount then damageAmount = "" end
+		if unit.IsPet(killerID) then
+			killerID = unit.GetPetOwner(killerID)
+			killer = FromWS(object.GetName(killerID))
+			abilityName = " (Pet)"
+		end
+		if not Config.showAbilityName then abilityName = "" end
+		if killerID == avatar.GetId() and Config.killedByPlayer then --The unit was killed by the player
+			announceContent = string.format(GTL("You killed")..abilityName..damageAmount, victim)
+			AddAnnouncement(announceContent,'killedByPlayer')
+			return
+		end
+		announceContent = string.format(GTL("killed")..abilityName..damageAmount, killer, victim)
+		if isFriendly then --A friendly unit was killed
+			if Config.friendKilled then
+				AddAnnouncement(announceContent,'friendKilled')
+				--return
+			end
+		elseif Config.killedByFriend then --An enemy was killed by a friendly
+			AddAnnouncement(announceContent,'killedByFriend')
 		end
 	end
 end
 
---EVENT_UNIT_DEAD_CHANGED
-function OnUnitDeadChanged(event)
-	if config['experimental'] then
-		local unitId = event.unitId
-		if object.IsExist(unitId)
+function MoveAnnouncements()
+	PanelIsMoving = true
+	for _, a in pairs(AnnounceList) do
+		local startPos = a:GetPlacementPlain()
+		local endPos = startPos
+		endPos.posY = endPos.posY + AnnouncePadding
+		a:PlayMoveEffect( startPos, endPos, 300, EA_MONOTONOUS_INCREASE )
+	end
+	PanelIsMoving = false
+end
+
+function GetUnitListOld()
+    local units = avatar.GetUnitList()
+    local newUnits = {}
+    for _,v in pairs(units) do
+        --Check if it's player
+        if object.IsExist(v)
+            and object.IsUnit(v)
+            and unit.IsPlayer(v)
+            then
+
+            local index = FindInTable(v,PlayersTracked)
+            if index ~= nil then
+                --Player already tracked, just remove from table
+                table.insert(newUnits,v)
+                table.remove(PlayersTracked,index)
+            else
+                --New player, must register event
+                OnUnitDamageReceivedFunctions[v] = function(p)
+                    OnUnitDamageReceived(p,v)
+                end
+                RegisterEventHandler('EVENT_UNIT_DAMAGE_RECEIVED',OnUnitDamageReceivedFunctions[v],{ target = v, lethal = true })
+                table.insert(newUnits,v)
+            end
+        end
+    end
+    -- Now we remove the handlers from players not near us
+    for _,v in pairs(PlayersTracked) do
+        UnregisterEvent('EVENT_UNIT_DAMAGE_RECEIVED',OnUnitDamageReceivedFunctions[v])
+    end
+    -- And update the PlayersTracked table
+    PlayersTracked = newUnits
+end
+
+function GetUnitList(first)
+    local units = avatar.GetUnitList()
+    -- unregister previous events
+	if #PlayersTracked > 0 then
+		UnregisterEvent('EVENT_UNIT_DAMAGE_RECEIVED')
+	end
+    -- Empty Players Tracked table
+    PlayersTracked = {}
+    --Register event for avatar  if it exists
+    if avatar.IsExist() then
+        RegisterEventHandler('EVENT_UNIT_DAMAGE_RECEIVED',function(p) OnUnitDamageReceived(p,avatar.GetId()) end, { target = avatar.GetId(), lethal = true })
+        table.insert(PlayersTracked,avatar.GetId())
+    end
+    for _,v in pairs(units) do
+        --Check if it's player
+        if object.IsExist(v)
+            and object.IsUnit(v)
+            and unit.IsPlayer(v)
+        then
+            --Add player id to PlayersTracked table
+            table.insert(PlayersTracked,v)
+            --Register the event
+            RegisterEventHandler('EVENT_UNIT_DAMAGE_RECEIVED',function(p) OnUnitDamageReceived(p,v) end, { target = v, lethal = true })
+        end
+    end
+end
+
+-- +================+
+-- | Event Handlers |
+-- +================+
+
+--EVENT_AVATAR_CREATED
+function OnAvatarCreated()
+    --Register on damage taken for avatar
+    -- RegisterEventHandler('EVENT_UNIT_DAMAGE_RECEIVED',function(p)OnUnitDamageReceived(p)end,{ target = avatar.GetId(), lethal = true })
+	-- avatarID = avatar.GetId()
+	--Register avatar-related handlers
+	--common.RegisterEventHandler(OnUnitDamageReceived, 'EVENT_UNIT_DAMAGE_RECEIVED')
+end
+
+function OnUnitDeadChanged(p)
+    local unitId = p.unitId
+    if FindInTable(unitId,PlayersTracked) then return false end
+    if object.IsExist(unitId)
 		 and object.IsUnit(unitId)
 		 and unit.IsPlayer(unitId)
-		 and object.IsDead(unitId)
-		then
-			StartTimer(OnUnitDeadChangedTimed,1000,unitId)
-		end
+		 and object.IsDead(unitId) then
+            local announceContent = string.format(GTL("died"), FromWS(object.GetName(unitId)))
+            local announceType = "killedByFriend"
+            if object.IsFriend(unitId) then
+				announceType = "friendKilled"
+			end
+            AddAnnouncement(announceContent,announceType)
+    end
+end
+
+function GetColors()
+	for k,_ in pairs(ColorList) do
+		ColorList[k] = ToHexConc(Config[k..'Color'])
+	end
+	ColorList.blue = 'FF3069F0'
+	ColorList.red = 'FFFF401D'
+	ColorList.info = 'FFFFFFFF'
+end
+
+function Defaults()
+    Config.killedByPlayer = false
+	Config.playerKilled = true
+	Config.killedByFriend = true
+	Config.friendKilled = true
+	Config.maxAnnouncements = 4
+	Config.fontSize = 18
+	Config.announcementDistance = 4
+	Config.visibleTime = 4500
+	Config.killedByPlayerColor = {r = 0; g = 1; b = 0; a = 1}
+	Config.playerKilledColor = {r = 1; g = 0; b = 0; a = 1}
+	Config.killedByFriendColor = {r = 0; g = 0; b = 1; a = 1}
+	Config.friendKilledColor = {r = 1; g = 0.67; b = 0; a = 1 }
+	Config.postInChat = true
+	Config.announceOnScreen = true
+	Config.pos = OriginalPos
+	Config.showAbilityName = true
+	Config.showDamageAmount = true
+	Config.version = Version
+	MainPanel:SetPlacementPlain(OriginalPos)
+    SaveSettings()
+	GetColors()
+end
+
+function ToggleDnD()
+	MainPanel:SetTransparentInput(DragPanel:IsVisible())
+	DragPanel:Show(not DragPanel:IsVisible())
+	FirstPos = MainPanel:GetPlacementPlain()
+	Config.pos = FirstPos
+    SaveSettings()
+end
+
+function SaveSettings()
+    SetSettings(configSectionName,Config)
+end
+
+-- AddonManager Events
+function ScriptAddonInfoRequest ( params )
+    PrintTable(params)
+	if params.target == common.GetAddonName() then
+		SendUserEvent("SCRIPT_ADDON_INFO_RESPONSE", { sender = params.target, desc = AddonDescription })
 	end
 end
 
+function MemRequest ( params )
+    PrintTable(params)
+	SendUserEvent("U_EVENT_ADDON_MEM_USAGE_RESPONSE", { sender = common.GetAddonName(), memUsage = gcinfo() })
+end
 
---EVENT_EFFECT_FINISHED
-function onEffectFinished ( event )
+
+-- ConfigWindow events
+function ConfigInitEvent ()
+	SendUserEvent("CONFIG_INIT_EVENT_RESPONSE", { sender = common.GetAddonName() })
+end
+
+function ConfigEvent ()
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 0, name = 'killedByPlayer', btnType = "T/F", state = Config.killedByPlayer})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 1, name = 'playerKilled', btnType = "T/F", state = Config.playerKilled})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 2, name = 'killedByFriend', btnType = "T/F", state = Config.killedByFriend})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 3, name = 'friendKilled', btnType = "T/F", state = Config.friendKilled})
+
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 4, name = 'maxAnnouncements', btnType = "EditLine", value = Config.maxAnnouncements})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 5, name = 'fontSize', btnType = "EditLine", value = Config.fontSize})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 6, name = 'announcementDistance', btnType = "EditLine", value = Config.announcementDistance})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 7, name = 'visibleTime', btnType = "EditLine", value = Config.visibleTime/1000})
+
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 8, name = 'killedByPlayerColor', btnType = "Color", color = Config.killedByPlayerColor})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 9, name = 'playerKilledColor', btnType = "Color", color = Config.playerKilledColor})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 10, name = 'friendKilledColor', btnType = "Color", color = Config.friendKilledColor})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 11, name = 'killedByFriendColor', btnType = "Color", color = Config.killedByFriendColor})
+
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 12, name = "DnD", btnType = "Simple",})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 13, name = 'postInChat', btnType = "T/F", state = Config.postInChat})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 14, name = 'announceOnScreen', btnType = "T/F", state = Config.announceOnScreen})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 15, name = 'showAbilityName', btnType = "T/F", state = Config.showAbilityName})
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 16, name = 'showDamageAmount', btnType = "T/F", state = Config.showDamageAmount})
+
+	SendUserEvent("CONFIG_EVENT_RESPONSE", {NoB = 18, name = 'Defaults', btnType = 'Simple'})
+
+end
+
+function ConfigColor(p)
+	Config[p.name] = p.color
+    SaveSettings()
+	GetColors()
+end
+
+
+function ConfigEditLine(p)
+    if p.name == "visibleTime" then
+        Config[p.name] = tonumber(p.text)*1000
+    else
+	    Config[p.name] = tonumber(p.text)
+    end
+    SaveSettings()
+    SendUserEvent('CONFIG_OPEN_EVENT_RESPONSE', {sender = common.GetAddonName()})
+end
+
+function ConfigButton(p)
+	Config[p.name] = p.state
+    SaveSettings()
+end
+
+
+function ConfigSimple(p)
+	if  p.name == 'Defaults' then
+		Defaults()
+        SendUserEvent('CONFIG_OPEN_EVENT_RESPONSE', {sender = common.GetAddonName()})
+    elseif p.name == 'DnD' then
+		ToggleDnD()
+	else
+        Config[p.name] = p.state
+    end
+end
+
+function OnSecondTimer()
+    -- Get Player list
+    GetUnitList()
+end
+
+function OnEffectFinished ( event )
 	if event.effectType == ET_FADE then
 		local fadeStatus = event.wtOwner:GetFade()
 
@@ -111,14 +416,13 @@ function onEffectFinished ( event )
 			event.wtOwner:Show(false)
 			event.wtOwner:DestroyWidget()
 			--Move all announcements down 1 place
-			moveAnnouncements()
-			table.remove(announceList, 1)
-			announceCount = table.getn(announceList)
+			MoveAnnouncements()
+			table.remove(AnnounceList, 1)
 		end
 
 		--Pretty clever, huh?
 		if fadeStatus > 0.9 and fadeStatus < 1.0 then
-			event.wtOwner:PlayFadeEffect( 1.0, 1.0, tonumber(config['visibleTime']), EA_MONOTONOUS_INCREASE )
+			event.wtOwner:PlayFadeEffect( 1.0, 1.0, tonumber(Config.visibleTime), EA_MONOTONOUS_INCREASE )
 		end
 
 		if fadeStatus == 1.0 then
@@ -127,359 +431,107 @@ function onEffectFinished ( event )
 	end
 end
 
---------------------------------------------------------------------------------
--- FUNCTIONS
---------------------------------------------------------------------------------
-
-function playerKilled (killerID,sourceName,ability,damage)
-	if killerID and object.IsExist(killerID) and object.IsUnit(killerID) then
-		--local killer = object.GetName(killerID)
-		local killer = sourceName
-		local abilityName = " ("..ability..")"
-		if damage > 1000000 then
-			damage = round(damage / 1000000,2)
-			damage = damage .. "M"
-		elseif damage > 1000 then
-			damage = round(damage / 1000,2)
-			damage = damage .. "K"
-		end
-		local damageAmount = " ("..damage..")"
-		if not config['showDamageAmount'] then damageAmount = "" end
-		--To prevent the pet name from showing up instead of the owner in the announcement
-		if unit.IsPet(killerID) then
-			killerID = unit.GetPetOwner(killerID)
-			killer = object.GetName(killerID)
-			abilityName = " (Pet)"
-		end
-		if not config['showAbilityName'] then abilityName = "" end
-		announceContent = string.format(GTL("You were killed by")..abilityName..damageAmount, killer)
-		addAnnouncement('playerKilled',announceContent)
-	end
-end
-
-function unitKilled (killerID, victimID, isFriendly, sourceName, ability, damage)
-	--if killerID == nil then return end
-	if victimID and unit.IsPet(victimID) then return end
-	if killerID and object.IsExist(killerID) and object.IsExist(victimID) and object.IsUnit(killerID) and object.IsUnit(victimID) then
-		--local killer = userMods.FromWString(object.GetName(killerID))
-		local killer = sourceName
-		local victim = fromWS(object.GetName(victimID))
-		local abilityName = " ("..ability..")"
-		if damage > 1000000 then
-			damage = round(damage / 1000000,2)
-			damage = damage .. "M"
-		elseif damage > 1000 then
-			damage = round(damage / 1000,2)
-			damage = damage .. "K"
-		end
-		local damageAmount = " ("..damage..")"
-		if not config['showDamageAmount'] then damageAmount = "" end
-		if unit.IsPet(killerID) then
-			killerID = unit.GetPetOwner(killerID)
-			killer = fromWS(object.GetName(killerID))
-			abilityName = " (Pet)"
-		end
-		if not config['showAbilityName'] then abilityName = "" end
-		if killerID == avatarID and config['killedByPlayer'] then --The unit was killed by the player
-			announceContent = string.format(GTL("You killed")..abilityName..damageAmount, victim)
-			addAnnouncement('killedByPlayer',announceContent)
-			return
-		end
-		announceContent = string.format(GTL("killed")..abilityName..damageAmount, killer, victim)
-		if isFriendly then --A friendly unit was killed
-			if config['friendKilled'] then
-				addAnnouncement('friendKilled',announceContent)
-				--return
-			end
-		elseif config['killedByFriend'] then --An enemy was killed by a friendly
-			addAnnouncement('killedByFriend',announceContent)
+function OnSlashCommand(p)
+    local m = FromWS(p.text)
+	if m == "/getcur" then
+		local ids = avatar.GetCurrencies()
+		for i,v in pairs(ids) do
+			local desc = avatar.GetCurrencyDescription( v )
+			local value = avatar.GetCurrencyValue(v)
+			local info = v:GetInfo()
+			PrintTable(info)
+			-- common.LogInfo("",desc .. ":" .. value)
 		end
 	end
-end
-
-
-function addAnnouncement (killType, content)
-	if config['announceOnScreen'] then
-		--Create and format the announcement
-		local announcement = mainForm:CreateWidgetByDesc(announceDesc)
-		local form = string.format('<header color="0x%s" alignx="center" fontsize="%s" outline="1" shadow="1"><rs class="class"><r name="value"/></rs></header>', colorList[killType], tostring(config['fontSize']))
-		local placement = nil
-
-		announcement:SetFormat(toWS(form))
-		--announcement:SetVal('value', toWS(announceContent))
-		announcement:SetVal('value', toWS(content))
-
-		table.insert(announceList, announcement)
-		announceCount = table.getn(announceList)
-
-		--Check where to put the announcememt
-		if announceCount > 1 then
-			placement = announceList[announceCount-1]:GetPlacementPlain()
-			placement.posY = placement.posY - distance
-		else
-			placement = firstPos
-		end
-		--Show the announcement
-		MainPanel:Show(true)
-		announcement:SetPlacementPlain(placement)
-		announcement:Show(true)
-		announcement:PlayFadeEffect( 0.0, .999, ANNOUNCE_FADE_IN_TIME, EA_MONOTONOUS_INCREASE)
-
-		--Remove the bottom announcement
-		if announceCount > config['maxAnnouncements'] then
-			if not moving then
-				announceList[1]:PlayFadeEffect(1.0, 0.0, ANNOUNCE_FADE_OUT_TIME, EA_MONOTONOUS_INCREASE)
-			end
-		end
-		if announceCount == 0 then MainPanel:Show(false) end
+	if m == "/katesttable" then
+		local t1 = {
+			number1 = 12,
+			string1 = "string test",
+			wstring = userMods.ToWString("Wstring value"),
+			table = {
+				number2 = 13
+			}
+		}
+		PrintTable(t1)
+		-- PushToChatSimple(printTable(t1))
 	end
-	if config['postInChat'] then
-		PushToChat(content,18,colorList[killType])
-	end
-end
-
-
-function moveAnnouncements ()
-	moving = true
-	for _, a in pairs(announceList) do
-		local startPos = a:GetPlacementPlain()
-		local endPos = startPos
-		endPos.posY = endPos.posY + distance
-		a:PlayMoveEffect( startPos, endPos, 300, EA_MONOTONOUS_INCREASE )
-	end
-	moving = false
-end
-
-
-function getColors ()
-	for k,_ in pairs(colorList) do
-		colorList[k] = toHexConc(config[k..'Color'])
-	end
-
-	colorList.blue = 'FF3069F0'
-	colorList.red = 'FFFF401D'
-	colorList.info = 'FFFFFFFF'
-end
-
-
---Stuff taken from Ciuine's NCT, I'm far too lazy to rewrite all this from scratch
-function toHexConc(N)
-	if not N then
-		N = {r = 0.86; g = 0.82; b = 0.078; a = 1}
-	end
-	local color = ""..toHex(N.a*255)..toHex(N.r*255)..toHex(N.g*255)..toHex(N.b*255)
-	return color
-end
-
-
-function toHex(N) --Modified version of someone else's free source C code. CREATES HEX FROM RGBA
-	if N==nil then
-		return "00"
-	elseif N==0 then
-		return "00"
-	else
-		N=math.max(0,N)
-		N=math.min(N,255)
-		N=math.ceil(N)
-		return string.sub("0123456789ABCDEF", 1 + (N- (N - math.floor(N/16)*16))/16, 1 + (N- (N - math.floor(N/16)*16))/16)..string.sub("0123456789ABCDEF", 1 + (N - math.floor(N/16)*16), 1 + (N - math.floor(N/16)*16))
-	end
-end
-
-
-function defaults ()
-	config['killedByPlayer'] = true
-	config['playerKilled'] = true
-	config['killedByFriend'] = true
-	config['friendKilled'] = true
-	config['maxAnnouncements'] = 4
-	config['fontSize'] = 18
-	config['announcementDistance'] = 4
-	config['visibleTime'] = 4500
-	config['killedByPlayerColor'] = {r = 0.86; g = 0.82; b = 0.078; a = 1}
-	config['playerKilledColor'] = {r = 0.8; g = 0.06; b = 0.06; a = 1}
-	config['killedByFriendColor'] = {r = 0.86; g = 0.82; b = 0.078; a = 1}
-	config['friendKilledColor'] = {r = 0.8; g = 0.06; b = 0.06; a = 1 }
-	config['postInChat'] = true
-	config['announceOnScreen'] = true
-	config['pos'] = originalPos
-	config['showAbilityName'] = true
-	config['showDamageAmount'] = true
-	config['version'] = version
-	config['experimental'] = true
-	MainPanel:SetPlacementPlain(originalPos)
-	userMods.SetAvatarConfigSection('KillAnnounce', config)
-	getColors()
-end
-
-
---------------------------------------------------------------------------------
--- ADDON MANAGER
---------------------------------------------------------------------------------
-
-function SCRIPT_ADDON_INFO_REQUEST ( params )
-	if params.target == common.GetAddonName() then
-		userMods.SendEvent( "SCRIPT_ADDON_INFO_RESPONSE",
-			{
-				sender = params.target,
-				desc = "Shows a notification when you or someone near you kills a player"
-			} )
-	end
-end
-
-function MemRequest ( params )
-	userMods.SendEvent( "U_EVENT_ADDON_MEM_USAGE_RESPONSE", { sender = common.GetAddonName(), memUsage = gcinfo() } )
-end
-
-
---------------------------------------------------------------------------------
--- CONFIG WINDOW
---------------------------------------------------------------------------------
-
-function ConfigInitEvent ()
-	userMods.SendEvent("CONFIG_INIT_EVENT_RESPONSE", { sender = common.GetAddonName() })
-end
-
-
-function ConfigEvent ()
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 0, name = 'killedByPlayer', btnType = "T/F", state = config['killedByPlayer']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 1, name = 'playerKilled', btnType = "T/F", state = config['playerKilled']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 2, name = 'killedByFriend', btnType = "T/F", state = config['killedByFriend']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 3, name = 'friendKilled', btnType = "T/F", state = config['friendKilled']})
-
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 4, name = 'maxAnnouncements', btnType = "EditLine", value = config['maxAnnouncements']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 5, name = 'fontSize', btnType = "EditLine", value = config['fontSize']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 6, name = 'announcementDistance', btnType = "EditLine", value = config['announcementDistance']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 7, name = 'visibleTime', btnType = "EditLine", value = config['visibleTime']})
-
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 8, name = 'killedByPlayerColor', btnType = "Color", color = config['killedByPlayerColor']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 9, name = 'playerKilledColor', btnType = "Color", color = config['playerKilledColor']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 10, name = 'friendKilledColor', btnType = "Color", color = config['friendKilledColor']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 11, name = 'killedByFriendColor', btnType = "Color", color = config['killedByFriendColor']})
-
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 12, name = "DnD", btnType = "Simple",})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 13, name = 'postInChat', btnType = "T/F", state = config['postInChat']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 14, name = 'announceOnScreen', btnType = "T/F", state = config['announceOnScreen']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 15, name = 'showAbilityName', btnType = "T/F", state = config['showAbilityName']})
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 16, name = 'showDamageAmount', btnType = "T/F", state = config['showDamageAmount']})
-
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 17, name = "experimental", btnType = 'T/F', state = config['experimental']})
-
-	userMods.SendEvent("CONFIG_EVENT_RESPONSE", {NoB = 18, name = 'Defaults', btnType = 'Simple'})
-
-
-end
-
-
-function ConfigButton (p)
-	config[p.name] = p.state
-	userMods.SetAvatarConfigSection('KillAnnounce', config)
-end
-
-
-function ConfigSimple (p)
-	if  p.name == 'Defaults' then
-		defaults()
-		userMods.SendEvent("CONFIG_OPEN_EVENT_RESPONSE", {sender = common.GetAddonName()})
-		userMods.SendEvent("CONFIG_OPEN_EVENT_RESPONSE", {sender = common.GetAddonName()})
-	end
-	if p.name == 'DnD' then
-		ToggleDnD()
-	end
-end
-
-function ToggleDnD()
-	MainPanel:SetTransparentInput(DragPanel:IsVisible())
-	DragPanel:Show(not DragPanel:IsVisible())
-	firstPos = MainPanel:GetPlacementPlain()
-	config['pos'] = firstPos
-	userMods.SetAvatarConfigSection('KillAnnounce', config)
-end
-
-
-function ConfigColor (p)
-	config[p.name] = p.color
-	userMods.SetAvatarConfigSection('KillAnnounce', config)
-	getColors()
-end
-
-
-function ConfigEditLine (p)
-	config[p.name] = tonumber(p.text)
-	userMods.SetAvatarConfigSection('KillAnnounce', config)
-	userMods.SendEvent("CONFIG_OPEN_EVENT_RESPONSE", {sender = common.GetAddonName()})
-	userMods.SendEvent("CONFIG_OPEN_EVENT_RESPONSE", {sender = common.GetAddonName()})
-end
-
-function OnSlash(p)
-	local m = fromWS(p.text)
 	if m == "/kadnd" then
 		ToggleDnD()
 	elseif m == "/kacw" then
 		userMods.SendEvent("CONFIG_OPEN_EVENT_RESPONSE", {sender = common.GetAddonName()})
-	elseif m == "/ka ver" then
-		PushToChatSimple("KillAnnounce: Version "..version..vdate)
-	end
+	elseif m == "/kaver" then
+		PushToChatSimple("KillAnnounce: Version "..Version..VDate)
+    elseif m == "/kaconfig" then
+        PrintTable(Config)
+    elseif m == "/katracked" then
+        LogInfo(#PlayersTracked)
+        PrintTable(PlayersTracked)
+    end
 end
 
-
-
---------------------------------------------------------------------------------
--- INITIALIZATION
---------------------------------------------------------------------------------
 function Init()
-	--Initialize widgets
-	MainPanel = mainForm:GetChildChecked("MainPanel", false)
-	MainPanel:Show(true)
-	originalPos = MainPanel:GetPlacementPlain()
-	AnnounceText = MainPanel:GetChildChecked( "Announce", false )
-	announceDesc = AnnounceText:GetWidgetDesc()
+    -- Initialize widgets
+    MainPanel = mainForm:GetChildChecked("MainPanel", false)
+    MainPanel:Show(true)
+    OriginalPos = MainPanel:GetPlacementPlain()
+    AnnounceText = MainPanel:GetChildChecked( "Announce", false )
+	AnnounceDesc = AnnounceText:GetWidgetDesc()
 	AnnounceText:SetVal("value", userMods.ToWString("First Announcement"))
 	AnnounceText:Show( false )
 
-	config = userMods.GetAvatarConfigSection('KillAnnounce')
-	if not config or (config['version'] ~= version and not isInTable(compatible, config['version'])) then
-		config = {}
-		defaults()
-	end
-	if config['pos'] then MainPanel:SetPlacementPlain(config['pos']) end
+    Config = GetSettings(configSectionName)
+    if (not Config) or (Config.version ~= Version and (not FindInTable(Config.version, CompatibleWithVersions))) then
+		Config = {}
+		Defaults()
+	else
+        GetColors()
+    end
+
+    if Config.pos then MainPanel:SetPlacementPlain(Config.pos) end
 	DragPanel = MainPanel:GetChildChecked("DragPanel", false)
 	DragPanel:SetBackgroundColor({r=0;b=0;g=0;a=.4})
 	DragPanel:Show(false)
 
-	DnD:Init( DragPanel, MainPanel, true, false)
+    
 
-	firstPos = MainPanel:GetPlacementPlain()
+    DnD:Init( DragPanel, MainPanel, true, false)
 
-	getColors()
-	distance = config['fontSize'] + config['announcementDistance']
+    FirstPos = MainPanel:GetPlacementPlain()
 
+    AnnouncePadding = Config.fontSize + Config.announcementDistance
+    -- Events
 
-	--DnD:Init(653, AnnounceText, AnnounceText)
+    -- Avatar Created
+    if avatar.IsExist() then
+        OnAvatarCreated()
+    else
+        OnEvent['EVENT_AVATAR_CREATED'] = { func = OnAvatarCreated }
+    end
 
-	--Check if the avatar was created
-	common.RegisterEventHandler(OnAvatarCreated,"EVENT_AVATAR_CREATED")
-	if avatar.IsExist() then OnAvatarCreated() end
+    -- Addon Manager
+    OnEvent['SCRIPT_ADDON_INFO_REQUEST'] = { func = ScriptAddonInfoRequest, params = { target = common.GetAddonName() } }
+    OnEvent['U_EVENT_ADDON_MEM_USAGE_REQUEST'] = { func = MemRequest }
 
-	--Register AddonManager and ConfigWindow handlers
-	common.RegisterEventHandler( SCRIPT_ADDON_INFO_REQUEST, "SCRIPT_ADDON_INFO_REQUEST" )
-	common.RegisterEventHandler(MemRequest, "U_EVENT_ADDON_MEM_USAGE_REQUEST")
+    -- Config Window
+    OnEvent['CONFIG_INIT_EVENT'] = { func = ConfigInitEvent }
+    OnEvent['CONFIG_EVENT_'..AddonName] = { func = ConfigEvent }
+    OnEvent['CONFIG_COLOR_'..AddonName] = { func = ConfigColor }
+    OnEvent['CONFIG_BUTTON_'..AddonName] = { func = ConfigButton }
+    OnEvent['CONFIG_SIMPLE_'..AddonName] = { func = ConfigSimple }
+    OnEvent['CONFIG_EDIT_LINE_'..AddonName] = { func = ConfigEditLine }
 
-	common.RegisterEventHandler( ConfigInitEvent, "CONFIG_INIT_EVENT" )
-	common.RegisterEventHandler( ConfigEvent, "CONFIG_EVENT_"..common.GetAddonName())
-	common.RegisterEventHandler( ConfigColor, "CONFIG_COLOR_"..common.GetAddonName())
-	common.RegisterEventHandler( ConfigButton, "CONFIG_BUTTON_"..common.GetAddonName())
-	common.RegisterEventHandler( ConfigSimple, "CONFIG_SIMPLE_"..common.GetAddonName())
-	common.RegisterEventHandler( ConfigEditLine, "CONFIG_EDIT_LINE_"..common.GetAddonName())
-	common.RegisterEventHandler( OnSlash, "EVENT_UNKNOWN_SLASH_COMMAND" )
+    -- Slash command
+    OnEvent['EVENT_UNKNOWN_SLASH_COMMAND'] = { func = OnSlashCommand }
 
-	--Register the rest of the event handlers
+    -- Other Events
+    OnEvent['EVENT_UNIT_DEAD_CHANGED'] = { func = OnUnitDeadChanged }
+    OnEvent['EVENT_SECOND_TIMER'] = { func = OnSecondTimer }
+    OnEvent['EVENT_EFFECT_FINISHED'] = { func = OnEffectFinished }
+    
 
-	common.RegisterEventHandler(onEffectFinished, "EVENT_EFFECT_FINISHED")
-	common.RegisterEventHandler(OnUnitDamageReceived, 'EVENT_UNIT_DAMAGE_RECEIVED')
-	common.RegisterEventHandler(OnUnitDeadChanged, 'EVENT_UNIT_DEAD_CHANGED')
+    RegisterEventHandlers(OnEvent)
+    RegisterReactionHandlers(OnReaction)
+    
 end
 
-
---------------------------------------------------------------------------------
 Init()
---------------------------------------------------------------------------------

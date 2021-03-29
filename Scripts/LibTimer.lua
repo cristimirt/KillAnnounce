@@ -6,9 +6,9 @@
 -- |Last update: 01-11-2016          |
 -- +=================================+
 
-Global("timerWidgetDesc",nil)
-Global("timerFunctions",{})
-Global("timerFunctionsParams",{})
+local TimerWidgetDesc = nil
+local TimerFunctions = {}
+local TimerFunctionsParams = {}
 
 function InitTimer()
     --Need to get a widget description
@@ -16,36 +16,44 @@ function InitTimer()
     for k,v in pairs(stateAddons) do
         if v.isLoaded then
             local wtAddonMainForm = common.GetAddonMainForm( v.name )
-            local wtChild = wtAddonMainForm:GetNamedChildren()[0]
-            timerWidgetDesc = wtChild:GetWidgetDesc()
-            break;
+            local children = common.GetAddonMainForm( v.name ):GetNamedChildren()
+            for i,j in ipairs(children) do
+                TimerWidgetDesc = j:GetWidgetDesc()
+                if TimerWidgetDesc then
+                    break
+                end
+            end
+            if TimerWidgetDesc then
+                break
+            end
         end
     end
 end
 
 function ExecuteTimerFunction(params)
     local widgetName = params.wtOwner:GetName()
-    if timerFunctions[widgetName] ~= nil then
-        local func = timerFunctions[widgetName]
-        if timerFunctionsParams[widgetName] ~= nil then
-            local params = timerFunctionsParams[widgetName]
+    if TimerFunctions[widgetName] ~= nil then
+        local func = TimerFunctions[widgetName]
+        if TimerFunctionsParams[widgetName] ~= nil then
+            local params = TimerFunctionsParams[widgetName]
             func(unpack(params))
-            timerFunctionsParams[widgetName] = nil
+            TimerFunctionsParams[widgetName] = nil
         else
             func()
         end
-        timerFunctions[widgetName] = nil
+        TimerFunctions[widgetName] = nil
         params.wtOwner:DestroyWidget()
     end
 end
 
 function StartTimer(func,time,...)
-    local wtTimerWidget = mainForm:CreateWidgetByDesc( timerWidgetDesc )
+    if not TimerWidgetDesc then return end
+    local wtTimerWidget = mainForm:CreateWidgetByDesc( TimerWidgetDesc )
     wtTimerWidget:Show(false)
     local timerWidgetName = "TimerWidget" .. tostring(common.GetRandFloat( 10000.0, 100000.0 ))
     wtTimerWidget:SetName(timerWidgetName)
-    timerFunctions[timerWidgetName] = func
-    timerFunctionsParams[timerWidgetName] = {select(1,...)}
+    TimerFunctions[timerWidgetName] = func
+    TimerFunctionsParams[timerWidgetName] = {select(1,...)}
     wtTimerWidget:PlayFadeEffect( 1.0, 1.0, time, EA_MONOTONOUS_INCREASE )
 end
 
