@@ -10,8 +10,8 @@ local AnnounceDesc
 
 -- Variables
 local AddonName = common.GetAddonName()
-local Version = "2.4.0"
-local VDate = "(17.03.2021)"
+local Version = "2.4.4"
+local VDate = "(30.03.2021)"
 local AddonDescription = "Shows a notification when you or a nearby player is killed"
 local configSectionName = 'KillAnnounce'
 local Config = {}
@@ -466,7 +466,20 @@ function OnSlashCommand(p)
     elseif m == "/katracked" then
         LogInfo(#PlayersTracked)
         PrintTable(PlayersTracked)
-    end
+	elseif string.find(m,"/kalocale") == 1 then
+		if m == "/kalocale" then 
+			PushToChatSimple("KillAnnounce : Locale is " .. GetLocalization())
+		else
+			local locale = string.sub(m,string.len("/kalocale ")+1,string.len(m))
+			if locale == 'eng' then locale = 'eng_eu' end
+			if IsValidLocale(locale) then
+				SetLocalization(locale)
+				PushToChatSimple("KillAnnounce : Locale set to " ..locale)
+			else
+				PushToChatSimple("KillAnnounce : " .. locale .. " is not a valid localization")
+			end
+		end
+	end
 end
 
 function Init()
